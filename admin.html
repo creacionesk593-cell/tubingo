@@ -225,6 +225,51 @@
         <button class="btn-azul" style="background: #e67e22; width: 100%;" onclick="guardarConfiguracionGlobalTable()">💾 Actualizar Parámetros Globales</button>
       </div>
 
+      <div class="seccion" style="border-left: 5px solid #3498db;">
+        <h3 style="color: #2980b9;">🧑‍💼 Gestión de Usuarios</h3>
+        <p style="font-size:0.85rem; color:#7f8c8d; margin-top:-5px;">Crea administradores o vendedores, suspéndelos, resetéales la contraseña o elimínalos.</p>
+
+        <div class="grid-parametros">
+          <div class="grupo-input">
+            <label for="nuevoUsuarioCorreo">Correo:</label>
+            <input type="email" id="nuevoUsuarioCorreo" placeholder="correo@ejemplo.com">
+          </div>
+          <div class="grupo-input">
+            <label for="nuevoUsuarioNombre">Nombre:</label>
+            <input type="text" id="nuevoUsuarioNombre" placeholder="Nombre completo">
+          </div>
+          <div class="grupo-input">
+            <label for="nuevoUsuarioClave">Contraseña inicial:</label>
+            <input type="text" id="nuevoUsuarioClave" placeholder="Mínimo 6 caracteres">
+          </div>
+          <div class="grupo-input">
+            <label for="nuevoUsuarioRol">Rol:</label>
+            <select id="nuevoUsuarioRol" style="padding:10px; border:1px solid #ccc; border-radius:6px; font-size:15px;">
+              <option value="usuario">Usuario (registra cartones)</option>
+              <option value="admin">Administrador</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn-azul" style="background:#2980b9; width:100%;" onclick="crearUsuarioNuevo()">➕ Crear Usuario</button>
+
+        <div class="table-container" style="margin-top:20px;">
+          <table id="tablaUsuarios">
+            <thead>
+              <tr>
+                <th>Correo</th>
+                <th>Nombre</th>
+                <th>Rol</th>
+                <th>Estado</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="5" style="color:#999; text-align:center;">Cargando usuarios...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="seccion" style="border: 1px solid #ff7675;">
         <h3 style="color: #d63031;">Zona de Peligro (Cierre de Evento)</h3>
         <p style="font-size:0.9rem; color:#636e72;">Descarga el respaldo completo en Excel y vacía la base de datos de manera irreversible.</p>
@@ -248,6 +293,7 @@
       cargarCodigoCanalActual();
       cargarDisenoEnPanel();
       cargarConfiguracionGlobalTable();
+      cargarUsuarios();
     });
 
     async function cargarDisenoEnPanel() {
@@ -535,8 +581,130 @@ async function guardarConfiguracionGlobalTable() {
   }
 }
 
+/* =========================================================================
+   GESTIÓN DE USUARIOS (crear, suspender, resetear clave, eliminar)
+   Crear / resetear clave / eliminar pasan por la Edge Function
+   "admin-usuarios", porque requieren la llave service_role del servidor.
+   Suspender / reactivar se hace directo en la tabla "perfiles" (RLS lo permite
+   porque el que llama ya es admin).
+   ========================================================================= */
 
+async function llamarFuncionAdmin(accion, datosExtra) {
+  const { data: { session } } = await _supabase.auth.getSession();
+  const respuesta = await fetch(`${SUPABASE_URL}/functions/v1/admin-usuarios`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${session.access_token}`
+    },
+    body: JSON.stringify({ accion, ...datosExtra })
+  });
+  return await respuesta.json();
+}
 
+async function cargarUsuarios() {
+  try {
+    const { data, error } = await _supabase
+      .from('perfiles')
+      .select('id, correo, nombre, rol, activo')
+      .order('correo', { ascending: true });
+
+    if (error) throw error;
+
+    const tbody = document.querySelector("#tablaUsuarios tbody");
+    tbody.innerHTML = "";
+
+    if (!data || data.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:#999;">No hay usuarios todavía</td></tr>`;
+      return;
+    }
+
+    data.forEach(u => {
+      const estaActivo = u.activo !== false;
+      tbody.innerHTML += `
+        <tr>
+          <td>${u.correo || "---"}</td>
+          <td>${u.nombre || "---"}</td>
+          <td>${u.rol === 'admin' ? '👑 Admin' : 'Usuario'}</td>
+          <td style="color:${estaActivo ? '#2ecc71' : '#d63031'}; font-weight:bold;">${estaActivo ? 'Activo' : 'Suspendido'}</td>
+          <td>
+            <button class="btn-accion ${estaActivo ? 'btn-borrar-item' : 'btn-modificar'}" onclick="alternarSuspension('${u.id}', ${estaActivo})">${estaActivo ? 'Suspender' : 'Reactivar'}</button>
+            <button class="btn-accion btn-modificar" onclick="resetearClaveUsuario('${u.id}', '${u.correo}')">Resetear Clave</button>
+            <button class="btn-accion btn-borrar-item" onclick="eliminarUsuarioDefinitivo('${u.id}', '${u.correo}')">Eliminar</button>
+          </td>
+        </tr>`;
+    });
+  } catch (err) {
+    console.error("Error cargando usuarios:", err.message);
+  }
+}
+
+async function crearUsuarioNuevo() {
+  const correo = document.getElementById("nuevoUsuarioCorreo").value.trim();
+  const nombre = document.getElementById("nuevoUsuarioNombre").value.trim();
+  const clave = document.getElementById("nuevoUsuarioClave").value;
+  const rol = document.getElementById("nuevoUsuarioRol").value;
+
+  if (!correo || !clave) { alert("Correo y contraseña inicial son obligatorios."); return; }
+  if (clave.length < 6) { alert("La contraseña debe tener al menos 6 caracteres."); return; }
+
+  document.getElementById("mainPanel").classList.add("loading");
+  try {
+    const resultado = await llamarFuncionAdmin("crear_usuario", { correo, clave, nombre, rol });
+    if (resultado.error) { alert("❌ " + resultado.error); return; }
+
+    alert(`✅ Usuario creado. Comparte estas credenciales con la persona:\n\nCorreo: ${correo}\nContraseña: ${clave}`);
+    document.getElementById("nuevoUsuarioCorreo").value = "";
+    document.getElementById("nuevoUsuarioNombre").value = "";
+    document.getElementById("nuevoUsuarioClave").value = "";
+    cargarUsuarios();
+  } catch (err) {
+    alert("❌ Error: " + err.message);
+  } finally {
+    document.getElementById("mainPanel").classList.remove("loading");
+  }
+}
+
+async function alternarSuspension(userId, estabaActivo) {
+  const accion = estabaActivo ? "suspender" : "reactivar";
+  if (!confirm(`¿Seguro que deseas ${accion} a este usuario?`)) return;
+
+  try {
+    const { error } = await _supabase.from('perfiles').update({ activo: !estabaActivo }).eq('id', userId);
+    if (error) throw error;
+    cargarUsuarios();
+  } catch (err) {
+    alert("❌ Error: " + err.message);
+  }
+}
+
+async function resetearClaveUsuario(userId, correo) {
+  const claveNueva = prompt(`Escribe la NUEVA contraseña temporal para ${correo} (mínimo 6 caracteres):`);
+  if (!claveNueva) return;
+  if (claveNueva.length < 6) { alert("La contraseña debe tener al menos 6 caracteres."); return; }
+
+  try {
+    const resultado = await llamarFuncionAdmin("resetear_clave", { userId, claveNueva });
+    if (resultado.error) { alert("❌ " + resultado.error); return; }
+    alert(`✅ Contraseña actualizada. Compártele a ${correo} su nueva contraseña temporal:\n\n${claveNueva}`);
+  } catch (err) {
+    alert("❌ Error: " + err.message);
+  }
+}
+
+async function eliminarUsuarioDefinitivo(userId, correo) {
+  if (!confirm(`¿ELIMINAR definitivamente la cuenta de ${correo}? Esta acción no se puede deshacer.`)) return;
+  if (prompt(`Escribe ELIMINAR para confirmar:`) !== "ELIMINAR") return;
+
+  try {
+    const resultado = await llamarFuncionAdmin("eliminar_usuario", { userId });
+    if (resultado.error) { alert("❌ " + resultado.error); return; }
+    alert("✅ Usuario eliminado.");
+    cargarUsuarios();
+  } catch (err) {
+    alert("❌ Error: " + err.message);
+  }
+}
 
   </script>
 </body>
