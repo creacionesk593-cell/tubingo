@@ -26,6 +26,10 @@
     <input type="password" id="clave" placeholder="Contraseña" autocomplete="current-password">
     <button id="btnEntrar" onclick="iniciarSesion()">Ingresar</button>
     <div id="mensajeError"></div>
+    <p style="text-align:center; margin-top:14px;">
+      <a href="#" onclick="solicitarRecuperacion(); return false;" style="color:#4CAF50; font-size:0.85rem; text-decoration:none;">¿Olvidaste tu contraseña?</a>
+    </p>
+    <div id="mensajeRecuperacion" style="color:#27ae60; font-size:0.85rem; text-align:center; margin-top:8px; min-height:1em;"></div>
   </div>
 
   <script>
@@ -81,6 +85,27 @@
       }
 
       await redirigirSegunRol(data.user.id);
+    }
+
+    async function solicitarRecuperacion() {
+      const correo = document.getElementById("correo").value.trim();
+      const msgError = document.getElementById("mensajeError");
+      const msgOk = document.getElementById("mensajeRecuperacion");
+      msgError.innerText = "";
+      msgOk.innerText = "";
+
+      if (!correo) {
+        msgError.innerText = "Escribe tu correo arriba y luego presiona el enlace.";
+        return;
+      }
+
+      const { error } = await _supabase.auth.resetPasswordForEmail(correo, {
+        redirectTo: window.location.origin + "/actualizar-clave.html"
+      });
+
+      // Por seguridad, mostramos el mismo mensaje exista o no esa cuenta,
+      // así nadie puede usar este formulario para adivinar correos registrados.
+      msgOk.innerText = "Si el correo está registrado, te enviamos un enlace para recuperar tu acceso. Revisa tu bandeja de entrada (y spam).";
     }
   </script>
 </body>
