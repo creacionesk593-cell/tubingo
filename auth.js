@@ -25,7 +25,7 @@ async function requerirSesion(rolRequerido) {
 
   if (error || !perfil || perfil.activo === false) {
     await _supabase.auth.signOut();
-    window.location.href = "login.html";
+    window.location.href = "index.html";
     return null;
   }
 
@@ -39,5 +39,5 @@ async function requerirSesion(rolRequerido) {
 
 async function cerrarSesion() {
   await _supabase.auth.signOut();
-  window.location.href = "login.html";
+  window.location.href = "index.html";
 }
