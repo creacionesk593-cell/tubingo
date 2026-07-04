@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Iniciar Sesión - TuBingo Pro</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: 'Segoe UI', sans-serif; margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #f1f2f6; color: #2d3436; }
+    .caja { background: white; padding: 35px 30px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); width: 100%; max-width: 380px; box-sizing: border-box; }
+    .caja h1 { margin: 0 0 5px; font-size: 1.4rem; color: #2c3e50; text-align: center; }
+    .caja p.subt { margin: 0 0 20px; font-size: 0.85rem; color: #7f8c8d; text-align: center; }
+    input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; box-sizing: border-box; }
+    button { width: 100%; padding: 13px; margin-top: 12px; background: #4CAF50; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; transition: filter 0.2s; }
+    button:hover { filter: brightness(0.95); }
+    button:disabled { background: #ccc; cursor: not-allowed; }
+    #mensajeError { color: #d63031; font-size: 0.85rem; text-align: center; margin-top: 12px; min-height: 1em; }
+  </style>
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <script src="conexion.js"></script>
+</head>
+<body>
+  <div class="caja">
+    <h1>TuBingo Pro</h1>
+    <p class="subt">Ingresa con tu cuenta para continuar</p>
+    <input type="email" id="correo" placeholder="Correo electrónico" autocomplete="username">
+    <input type="password" id="clave" placeholder="Contraseña" autocomplete="current-password">
+    <button id="btnEntrar" onclick="iniciarSesion()">Ingresar</button>
+    <div id="mensajeError"></div>
+  </div>
+
+  <script>
+    // Si ya hay una sesión activa (recargó la página, por ejemplo),
+    // lo mandamos directo a donde le corresponde según su rol.
+    window.addEventListener('load', async () => {
+      const { data: { session } } = await _supabase.auth.getSession();
+      if (session) await redirigirSegunRol(session.user.id);
+    });
+
+    async function redirigirSegunRol(userId) {
+      const { data: perfil } = await _supabase
+        .from('perfiles')
+        .select('rol, activo')
+        .eq('id', userId)
+        .single();
+
+      if (perfil && perfil.activo !== false) {
+        window.location.href = perfil.rol === 'admin' ? "admin.html" : "registro.html";
+      }
+    }
+
+    // Permite enviar con la tecla Enter
+    document.getElementById("clave").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") iniciarSesion();
+    });
+
+    async function iniciarSesion() {
+      const correo = document.getElementById("correo").value.trim();
+      const clave = document.getElementById("clave").value;
+      const btn = document.getElementById("btnEntrar");
+      const msg = document.getElementById("mensajeError");
+      msg.innerText = "";
+
+      if (!correo || !clave) {
+        msg.innerText = "Completa correo y contraseña.";
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerText = "Verificando...";
+
+      const { data, error } = await _supabase.auth.signInWithPassword({
+        email: correo,
+        password: clave
+      });
+
+      if (error) {
+        msg.innerText = "Correo o contraseña incorrectos.";
+        btn.disabled = false;
+        btn.innerText = "Ingresar";
+        return;
+      }
+
+      await redirigirSegunRol(data.user.id);
+    }
+  </script>
+</body>
+</html>
