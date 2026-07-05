@@ -5,7 +5,7 @@
 
 /**
  * Exige que haya sesión iniciada y, opcionalmente, un rol específico.
- * Si no hay sesión -> redirige a login.html
+ * Si no hay sesión -> redirige a index.html
  * Si el rol no coincide -> redirige a la página que sí le corresponde
  * Devuelve { session, perfil } si todo está bien.
  */
