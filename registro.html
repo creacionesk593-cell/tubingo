@@ -88,9 +88,14 @@
   <script src="auth.js"></script>
 </head>
 <body>
-  <header id="headerRegistro">
+  <header id="headerRegistro" style="position:relative;">
+    <div id="barraUsuario" style="position:absolute; left:15px; top:15px; text-align:left; font-size:0.8rem; line-height:1.3; opacity:0.95;">
+      <div id="nombreUsuarioActivo" style="font-weight:bold;"></div>
+      <div id="correoUsuarioActivo"></div>
+    </div>
     <img id="logoDinamico" class="header-logo" src="" alt="Bingo Logo">
     <h2 id="tituloHeader">Registro de Cartones - TuBingo Pro</h2>
+    <button onclick="cerrarSesion()" style="position:absolute; right:15px; top:15px; width:auto; padding:8px 14px; font-size:13px; background:rgba(255,255,255,0.25); border:none; border-radius:6px; color:inherit; cursor:pointer;">Salir</button>
   </header>
   
   <main id="contenidoPrincipal">
@@ -167,6 +172,12 @@
       // Si es admin -> admin.html. El resto del código sigue igual.
       const acceso = await requerirSesion('usuario');
       if (!acceso) return;
+
+      // Mostrar quién inició sesión y precargar su nombre en "vendedor"
+      const nombreUsuario = acceso.perfil.nombre || acceso.session.user.email;
+      document.getElementById("nombreUsuarioActivo").innerText = nombreUsuario;
+      document.getElementById("correoUsuarioActivo").innerText = acceso.session.user.email;
+      document.getElementById("vendedor").value = nombreUsuario;
 
       fetch('https://api.ipify.org?format=json').then(res => res.json()).then(d => ipPublica = d.ip).catch(e => {});
       if (navigator.geolocation) {
@@ -459,7 +470,7 @@
         document.getElementById("correo").value = "";
         document.getElementById("ciudad").value = "";
         document.getElementById("direccion").value = "";
-        document.getElementById("vendedor").value = "";
+        document.getElementById("vendedor").value = document.getElementById("nombreUsuarioActivo").innerText;
         document.getElementById("codigoCanal").value = "";
 
       } catch (err) { alert("Error: " + err.message); } 
