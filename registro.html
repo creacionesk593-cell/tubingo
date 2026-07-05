@@ -88,10 +88,9 @@
   <script src="auth.js"></script>
 </head>
 <body>
-  <header id="headerRegistro" style="position:relative;">
+  <header id="headerRegistro">
     <img id="logoDinamico" class="header-logo" src="" alt="Bingo Logo">
     <h2 id="tituloHeader">Registro de Cartones - TuBingo Pro</h2>
-    <button onclick="cerrarSesion()" style="position:absolute; right:15px; top:15px; width:auto; padding:8px 14px; font-size:13px; background:rgba(255,255,255,0.25);">Salir</button>
   </header>
   
   <main id="contenidoPrincipal">
@@ -114,6 +113,11 @@
       <input type="text" id="ciudad" placeholder="Ciudad (Ej: Guayaquil)" required>
       <input type="text" id="direccion" placeholder="Dirección Exacta (Ej: Isla Trinitaria solar 45)" required>
       <input type="text" id="vendedor" placeholder="Nombre del Vendedor (Opcional)">
+      
+      <div style="margin-top: 15px; border-top: 1px solid #edf2f7; padding-top: 10px;">
+        <label for="codigoCanal" style="font-weight: bold; color: #e67e22;">🔑 Código Secreto del Canal de WhatsApp:</label>
+        <input type="text" id="codigoCanal" placeholder="Escribe la clave fijada en nuestro canal" required style="border: 2px solid #e67e22; text-transform: uppercase; font-weight: bold;">
+      </div>
 
       <button id="btnRegistrar" onclick="enviarAlBackend()">Registrar Cartones en el Sistema</button>
     </div>
@@ -159,8 +163,8 @@
     }
 
     window.addEventListener('load', async () => {
-      // Verifica que haya sesión iniciada y que el rol sea "usuario".
-      // Si es admin, lo manda a admin.html; si no hay sesión, a login.html.
+      // Exige sesión iniciada con rol "usuario". Si no hay sesión -> index.html.
+      // Si es admin -> admin.html. El resto del código sigue igual.
       const acceso = await requerirSesion('usuario');
       if (!acceso) return;
 
@@ -370,8 +374,9 @@
       let ciudad = document.getElementById("ciudad").value.trim();
       let direccion = document.getElementById("direccion").value.trim();
       let vendedor = document.getElementById("vendedor").value.trim() || "WEB";
+      let codigoIngresado = document.getElementById("codigoCanal").value.trim().toUpperCase();
 
-      if (!nombre || !celular || !correo || !ciudad || !direccion) {
+      if (!nombre || !celular || !correo || !ciudad || !direccion || !codigoIngresado) {
         alert("Por favor complete todos los campos requeridos.");
         return;
       }
@@ -384,11 +389,28 @@
       let mainEl = document.getElementById("contenidoPrincipal");
       let btn = document.getElementById("btnRegistrar");
       mainEl.classList.add("loading");
-      btn.innerText = "Verificando disponibilidad...";
+      btn.innerText = "Verificando códigos...";
 
       cartonesDuplicados = [];
 
       try {
+        // =========================================================================
+        // MEJORA EXCLUSIVA DE SEGURIDAD (OWASP)
+        // Se ejecuta la función RPC en Supabase. El texto de la clave nunca sale al cliente.
+        // =========================================================================
+        const { data: esCodigoValido, error: errRpc } = await _supabase
+          .rpc('verificar_codigo_canal', { codigo_usuario: codigoIngresado });
+
+        if (errRpc) throw errRpc;
+
+        if (!esCodigoValido) {
+          alert("❌ El Código Secreto del Canal de WhatsApp es incorrecto.");
+          mainEl.classList.remove("loading");
+          btn.innerText = "Registrar Cartones en el Sistema";
+          return;
+        }
+        // =========================================================================
+
         const { data: existentes, error: errConteo } = await _supabase
           .from('registros_bingo')
           .select('id')
@@ -438,6 +460,7 @@
         document.getElementById("ciudad").value = "";
         document.getElementById("direccion").value = "";
         document.getElementById("vendedor").value = "";
+        document.getElementById("codigoCanal").value = "";
 
       } catch (err) { alert("Error: " + err.message); } 
       finally { mainEl.classList.remove("loading"); btn.innerText = "Registrar Cartones en el Sistema"; }
